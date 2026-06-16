@@ -38,6 +38,7 @@ policy Irreversible {
   forbid contains "DELETE FROM"
   forbid contains "mkfs"
   forbid contains "dd if="
+  forbid contains "shutil.rmtree"
 }
 ```
 

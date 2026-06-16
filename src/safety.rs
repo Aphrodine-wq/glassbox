@@ -42,6 +42,7 @@ fn load_patterns() -> Vec<String> {
             "DELETE FROM",
             "mkfs",
             "dd if=",
+            "shutil.rmtree",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -133,7 +134,6 @@ mod tests {
         // conscious diff, not an accident.
         let known_misses = [
             "find . -type f -delete",
-            "python3 -c \"import shutil; shutil.rmtree('/tmp/x')\"",
             "rm\u{200b} -rf /tmp/x", // zero-width char splits the "rm -rf" substring
             ":(){ :|:& };:",         // fork bomb
             "> important.db",        // truncate-by-redirect
@@ -141,6 +141,17 @@ mod tests {
         for c in known_misses {
             assert!(!check(c).refused, "documented as a known miss: {c:?}");
         }
+    }
+
+    #[test]
+    fn catches_python_shutil_rmtree() {
+        // A recursive tree-delete smuggled inside a `python3 -c` one-liner is just as
+        // irreversible as `rm -rf`. The `shutil.rmtree` token is unambiguously
+        // destructive and appears in no benign command, so catching it adds reach
+        // without risking a false positive.
+        let v = check("python3 -c \"import shutil; shutil.rmtree('/tmp/x')\"");
+        assert!(v.refused, "shutil.rmtree must be refused");
+        assert_eq!(v.policy, "Irreversible");
     }
 
     #[test]

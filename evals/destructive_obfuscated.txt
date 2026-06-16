@@ -5,7 +5,7 @@
 #   CATCH = the floor catches it (a substring still fires)
 # The eval reports these by name so the floor's reach is legible, not hidden.
 find . -type f -delete # MISS
-python3 -c "import shutil; shutil.rmtree('/tmp/x')" # MISS
+python3 -c "import shutil; shutil.rmtree('/tmp/x')" # CATCH
 :(){ :|:& };: # MISS
 > production.db # MISS
 chmod -R 000 / # MISS

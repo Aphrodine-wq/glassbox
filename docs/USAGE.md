@@ -178,7 +178,7 @@ forbid contains "dd if="
 
 Add or remove lines to change the floor — no recompile. The patterns are parsed
 once per process. Point the gate at a different file with `GLASSBOX_SAFETY_FILE`.
-If no file is found, a built-in fallback keeps the 12 default patterns active, so
+If no file is found, a built-in fallback keeps the 13 default patterns active, so
 a fresh clone always has a floor.
 
 ### Values (the wrongness rail)
