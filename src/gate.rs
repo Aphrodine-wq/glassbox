@@ -53,7 +53,7 @@ pub fn perceive(tool_name: &str, tool_input: &serde_json::Value) -> (String, Str
 /// demo/card). When `full` is false (the hook hot path) a safety refusal
 /// short-circuits and skips the values subprocess.
 pub fn evaluate(action: &str, target: &str, full: bool) -> Vec<Verdict> {
-    evaluate_with(action, target, full, &values::TesseraOracle::from_env())
+    evaluate_with(action, target, full, values::active_oracle())
 }
 
 /// `evaluate` with an injectable values oracle. Production uses the env-derived

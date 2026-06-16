@@ -8,7 +8,7 @@
 //! (spawns Tessera) and its separate, subprocess-dominated latency.
 
 use crate::safety;
-use crate::values::{check_with, TesseraOracle};
+use crate::values::{self, check_with};
 use std::time::Instant;
 
 const DESTRUCTIVE: &str = include_str!("../evals/destructive.txt");
@@ -148,25 +148,25 @@ pub fn cmd_eval(args: &[String]) -> i32 {
 }
 
 fn eval_values() {
-    let oracle = TesseraOracle::from_env();
+    let oracle = values::active_oracle();
     let viol_refused = VALUES_VIOLATIONS
         .iter()
-        .filter(|a| check_with(a, "test", &oracle).refused)
+        .filter(|a| check_with(a, "test", oracle).refused)
         .count();
     let benign_refused = VALUES_BENIGN
         .iter()
-        .filter(|a| check_with(a, "test", &oracle).refused)
+        .filter(|a| check_with(a, "test", oracle).refused)
         .count();
 
     // Pre-screen skip (no subprocess) vs the Tessera subprocess path.
     let t = Instant::now();
-    let _ = check_with("git status", "shell", &oracle);
+    let _ = check_with("git status", "shell", oracle);
     let skip_us = t.elapsed().as_micros();
     let t = Instant::now();
-    let _ = check_with("reprice loyal client", "loyal-client", &oracle);
+    let _ = check_with("reprice loyal client", "loyal-client", oracle);
     let sub_ms = t.elapsed().as_millis();
 
-    println!("\n## Values rail (Tessera)\n");
+    println!("\n## Values rail ({})\n", values::active_oracle_name());
     println!("| corpus            | n | refused | note |");
     println!("|-------------------|---|---------|------|");
     println!(
@@ -182,7 +182,7 @@ fn eval_values() {
     println!("\n| path                       | latency  |");
     println!("|----------------------------|----------|");
     println!("| values pre-screen (skip)   | {skip_us} µs |");
-    println!("| values (Tessera subprocess)| {sub_ms} ms |");
+    println!("| values (oracle consult)    | {sub_ms} ms |");
 }
 
 /// (command, optional tag). Skips blank and pure-comment lines.

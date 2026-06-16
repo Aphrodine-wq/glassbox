@@ -50,16 +50,23 @@ machine; they reason model-side. Complementary, not competing.
 
 ## Two rails — both readable markdown
 
-Governance isn't reimplemented in Rust — it's delegated to **Tessera `.t.md`**
-files you can open, read, and edit. Blocked if *either* rail refuses:
+Governance is legible, not buried in Rust. The safety floor is a list of patterns
+in a markdown file you can edit; the values rail runs a small, readable rule set
+in-process — or your richer **Tessera Conscience** agent if one is installed.
+Blocked if *either* rail refuses:
 
 | Rail | Refuses what is… | Source | Runs |
 | --- | --- | --- | --- |
 | **safety** | *irreversible* — rm -rf, force push, hard reset, table drop | `agents/safety.t.md` (patterns read at runtime) | in-process, always on, never fails |
-| **values** | *wrong* — extractive, unfair, repricing a loyal client | `mind/conscience.t.md` (Conscience) | Tessera subprocess, pre-screened, fail-open |
+| **values** | *wrong* — extractive, unfair, repricing a loyal client | native rules by default; `mind/conscience.t.md` via Tessera if present | in-process, pre-screened, fail-open |
 
 The two answer different questions. A force-push violates no *value* — it's not
 unfair, it's just unrecoverable. A values-only gate waves it through. You need both.
+
+**No Tessera, no Python required.** A fresh `git clone` gets a fully working
+two-rail gate out of the box: the values rail uses a dependency-free native oracle
+that reproduces the Conscience judgment. If a Tessera install is found on disk, the
+gate upgrades to it automatically — zero config either way.
 
 ## Shadow-first — it can't break your workflow
 
@@ -74,22 +81,23 @@ human's flow*:
 - **Safety runs in-process** — pure string match over patterns cached once at
   startup, **p50 ~0.4µs / p99 ~0.7µs** (measured, release), no subprocess, no
   failure mode. The hard floor.
-- **Values is pre-screened** — the Tessera subprocess only fires when the action
-  contains a values keyword; the 99% of commands with nothing to do with money
-  pay **~7µs** and skip it entirely.
-- **Values fails *open*** — a Tessera hiccup logs and allows rather than bricking
-  the agent. A missed refusal during an outage is recoverable; a blocked agent is
-  not. Safety, which never fails, stays the floor.
+- **Values is pre-screened** — it only evaluates when the action contains a values
+  keyword; the 99% of commands with nothing to do with money pay **~7µs** and skip
+  it entirely. The check is native and in-process by default; with Tessera installed
+  it consults your richer Conscience agent instead.
+- **Values fails *open*** — an oracle hiccup (e.g. a Tessera timeout) logs and allows
+  rather than bricking the agent. A missed refusal during an outage is recoverable;
+  a blocked agent is not. Safety, which never fails, stays the floor.
 - **The hook can't crash a tool call** — its body is panic-caught; worst case it
   silently defers.
 
 ## Provenance — the *why*, not just the verdict
 
 Every decision carries its reasoning: the value it touches, the intent, where it
-escalates. The values rail's refusals also persist to Tessera's permanent
-governance audit graph (`~/.tessera/audit_governance.db`); `glassbox status` links
-the two stores so you can prove an agent did the right thing for the right reason —
-not reconstruct it from a log after the fact.
+escalates. When the Tessera oracle is active, the values rail's refusals also
+persist to Tessera's permanent governance audit graph (`~/.tessera/audit_governance.db`),
+and `glassbox status` links the two stores — so you can prove an agent did the right
+thing for the right reason, not reconstruct it from a log after the fact.
 
 ## One gate, any agent
 
@@ -130,15 +138,20 @@ keyword hit): ~140ms.
 
 ## Use
 
+Full guide: **[docs/USAGE.md](docs/USAGE.md)** — install, every command, the
+`gate-json` protocol, MCP, customizing both rails, and env vars.
+
 ```bash
 cargo build --release
-glassbox demo                       # six governed actions, each rendered
+./target/release/glassbox demo      # six governed actions, each rendered
 glassbox gate "git push --force"    # govern one action (enforce; exit 1 if blocked)
 echo '{"action":"…"}' | glassbox gate-json   # the generic API
 glassbox watch                      # live card stream as decisions happen
-glassbox status                     # recent decisions + Tessera provenance link
-glassbox eval                       # the benchmark
+glassbox status                     # recent decisions + provenance link
+glassbox eval                       # the benchmark (add --values for the values rail)
 ```
+
+No Tessera or Python needed — the values rail runs natively out of the box.
 
 ### Wire it into Claude Code (shadow)
 
@@ -176,9 +189,9 @@ default.
 
 ## License
 
-MIT. Built on Tessera (the WALT runtime). The values rail reads Conscience; the
-safety floor is plain markdown you can edit. We do not build on Screenpipe
-(commercial source-available) or Khoj (AGPL).
+MIT. The safety floor is plain markdown you can edit; the values rail runs natively
+out of the box, or reads a Tessera Conscience agent if one is installed. Tessera (the
+WALT runtime) is an optional upgrade, not a dependency.
 
 > Name note: "The Glass Box" also names an unrelated Solana project and is a generic
 > interpretability term. Kept for community resonance, eyes open.

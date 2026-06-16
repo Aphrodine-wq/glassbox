@@ -13,8 +13,9 @@
 //! fail-open path can be exercised in tests without a live Tessera.
 
 use crate::gate::Verdict;
+use std::path::Path;
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{mpsc, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -46,10 +47,95 @@ pub struct Refusal {
 /// The values rail's dependency on an external governance oracle. The production
 /// impl shells out to Tessera; tests inject fakes to exercise the fail-open path
 /// without a live Tessera.
-pub trait ConscienceOracle {
+pub trait ConscienceOracle: Send + Sync {
     /// `Some(Refusal)` on refusal; `None` on a clean pass **or any infra failure**
     /// — the fail-open contract lives in the impl, not the caller.
     fn consult(&self, action: &str, target: &str) -> Option<Refusal>;
+
+    /// Short label for diagnostics (which oracle is governing).
+    fn name(&self) -> &'static str {
+        "oracle"
+    }
+}
+
+/// The native, dependency-free conscience. Encodes the same moral-foundations
+/// judgment as the Tessera `conscience.t.md` (extraction, unfair markup on a
+/// counterparty, repricing a loyal relationship, deception) directly in Rust, so
+/// the values rail works on a fresh `git clone` with **no Tessera and no Python**.
+/// It is the default oracle whenever a Tessera install isn't found on disk.
+///
+/// This runs only after the keyword pre-screen in [`check_with`], so it sees just
+/// the small slice of actions that plausibly touch money or a relationship.
+pub struct BuiltinOracle;
+
+impl ConscienceOracle for BuiltinOracle {
+    fn consult(&self, action: &str, target: &str) -> Option<Refusal> {
+        let hay = format!("{action} {target}").to_lowercase();
+        let has = |words: &[&str]| words.iter().any(|w| hay.contains(w));
+
+        // care — deception/fraud is wrong regardless of who it targets.
+        if has(&["defraud", "deceive", "scam", "mislead", "trick"]) {
+            return Some(refusal("care", "deceiving the counterparty"));
+        }
+        // fairness — inherently extractive verbs are wrong on their face.
+        if has(&["gouge", "price gouge", "exploit", "squeeze", "overcharge"]) {
+            return Some(refusal("fairness", "extractive: takes more than is fair"));
+        }
+        // loyalty — don't reprice/raise on a loyal relationship.
+        if has(&["loyal"])
+            && has(&[
+                "reprice", "raise", "increase", "hike", "bump", "rate", "price",
+            ])
+        {
+            return Some(refusal("loyalty", "repricing a loyal relationship"));
+        }
+        // fairness — marking up a known counterparty (homeowner/customer/client).
+        if has(&["homeowner", "customer", "client", "tenant"])
+            && has(&["markup", "upcharge", "inflate", "pad the", "hidden fee"])
+        {
+            return Some(refusal("fairness", "unfair markup on the counterparty"));
+        }
+        None
+    }
+
+    fn name(&self) -> &'static str {
+        "native"
+    }
+}
+
+/// A refusal tagged with the moral foundation it offends. `NoExtraction` matches
+/// the policy name the Tessera conscience reports, so provenance and cards read
+/// identically whichever oracle fired.
+fn refusal(foundation: &str, why: &str) -> Refusal {
+    Refusal {
+        reason: format!("forbid when extracts(value()) — {foundation}: {why}"),
+        policy: "NoExtraction".into(),
+    }
+}
+
+/// Pick the values oracle once, by what's actually installed: the richer Tessera
+/// conscience if both its binary and the conscience file exist on disk, otherwise
+/// the native [`BuiltinOracle`]. Zero-config — a contributor with Tessera gets it
+/// automatically; everyone else gets a working values rail with no setup.
+fn select_oracle() -> Box<dyn ConscienceOracle> {
+    let t = TesseraOracle::from_env();
+    if Path::new(&t.bin).exists() && Path::new(&t.agent).exists() {
+        Box::new(t)
+    } else {
+        Box::new(BuiltinOracle)
+    }
+}
+
+/// The process-wide active oracle, chosen once (the on-disk probe in
+/// [`select_oracle`] does not repeat on the hot path).
+pub fn active_oracle() -> &'static dyn ConscienceOracle {
+    static ORACLE: OnceLock<Box<dyn ConscienceOracle>> = OnceLock::new();
+    ORACLE.get_or_init(select_oracle).as_ref()
+}
+
+/// Name of the active oracle (`"native"` or `"Tessera"`) for diagnostics.
+pub fn active_oracle_name() -> &'static str {
+    active_oracle().name()
 }
 
 /// Production oracle: spawn `tessera compile … --run Conscience` with a timeout.
@@ -120,6 +206,10 @@ impl ConscienceOracle for TesseraOracle {
                 None
             }
         }
+    }
+
+    fn name(&self) -> &'static str {
+        "Tessera"
     }
 }
 
@@ -430,6 +520,32 @@ mod tests {
     fn clean_pass_allows() {
         let v = check_with("charge a fair rate", "stranger", &AlwaysClean);
         assert!(!v.refused);
+    }
+
+    #[test]
+    fn builtin_oracle_matches_conscience_without_tessera() {
+        // The dependency-free oracle must reproduce the conscience.t.md judgment:
+        // refuse extraction / loyalty violations, pass fair business.
+        let refuse = |a: &str, t: &str| check_with(a, t, &BuiltinOracle).refused;
+
+        // Refuse — extractive or loyalty-violating.
+        assert!(refuse(
+            "reprice loyal client to market rate",
+            "loyal-client"
+        ));
+        assert!(refuse(
+            "gouge the homeowner on materials markup",
+            "homeowner"
+        ));
+        assert!(refuse("squeeze the customer with a hidden fee", "customer"));
+        assert!(refuse("defraud the client on the invoice", "client"));
+
+        // Pass — fair business, not over-broad.
+        assert!(!refuse("reprice the SaaS tier for new signups", "market"));
+        assert!(!refuse("issue a refund to the customer", "customer"));
+        assert!(!refuse("charge the standard deposit", "homeowner"));
+
+        assert_eq!(BuiltinOracle.name(), "native");
     }
 
     #[test]
