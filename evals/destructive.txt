@@ -1,0 +1,14 @@
+# Destructive actions the minimal floor SHOULD catch (one per declared pattern).
+# Format: one action per line; blank lines and #-comment lines are ignored.
+rm -rf ~/Projects/old
+rm -fr /tmp/build
+git push origin main --force
+git push -f origin feature
+git reset --hard HEAD~3
+psql -c 'drop table users'
+psql -c 'DROP TABLE sessions'
+truncate -s 0 database.sql
+delete from orders where 1=1
+DELETE FROM customers
+mkfs.ext4 /dev/sdb1
+dd if=/dev/zero of=/dev/sda bs=1M

@@ -1,66 +1,150 @@
 # The Glass Box
 
-> A governance trust-layer for agents. Rust. The values-check *is* the card a
-> person reads at the moment the agent acts.
+> A governance trust-layer for agents. Rust. It renders a **governed decision to
+> a human at the moment of action** — and, in shadow mode, never gets in your way.
 
-Every agent framework is a black box with a debugger bolted on. **The Glass Box
-makes an agent's actions legible and governed at the moment they happen**: each
-proposed action runs through two readable rails and renders as a plain-language
-**trust-card** — and is *refused* if a rail says no. Not a JSON trace for an
-engineer to debug after the fact. A card a human reads at the instant of action.
+Every agent framework is a black box with a debugger bolted on. The tools that
+govern agents are policy-as-code for engineers; the tools that show you an agent's
+reasoning are trace waterfalls you read *after* something broke. **Nobody renders
+a governed decision to a human, for trust, at the moment of action.** That corner
+is the Glass Box's.
+
+Each proposed action runs through two readable rails and renders as a plain-language
+**trust-card**. In the default **shadow** mode nothing is blocked — the card shows
+you what the gate *would* do and exactly why, while the action proceeds. You see
+the governance; it never breaks your flow.
 
 ```
-  ▸ Force-push to main (IRREVERSIBLE)
-  ┌─ GLASS BOX ─ moment of action ─────────────
+  ┌─ GLASS BOX ─ moment of action ─ [SHADOW] ─
     perceive  git push origin main --force
+    target    git
     values  ✓ clean
-    safety  ⛔ refused  contains forbidden substring '--force'  [Irreversible]
-    decision  ⛔ BLOCKED  safety rail: contains forbidden substring '--force'
+    safety  ⛔ would-refuse  contains forbidden substring '--force'  [Irreversible]
+            ↳ value: reversibility · intent: guard_action · escalate: a human clears irreversible calls
+    decision  SHADOW · WOULD-REFUSE (Irreversible) — allowed to proceed (shadow)
   └──────────────────────────────────────────
 ```
 
+That last line is the whole thesis: the human sees the governed decision **and**
+sees that shadow let it run. Flip one env var to `enforce` and the same gate denies.
+
+## The wedge
+
+```
+                 engineer-facing                 human-facing
+              ┌───────────────────────────┬───────────────────────────┐
+   before /   │  policy-as-code           │                           │
+   at action  │  (NeMo, MS Agent Gov.)    │     ◆ THE GLASS BOX        │
+              ├───────────────────────────┼───────────────────────────┤
+   after /    │  trace debuggers          │                           │
+   post-hoc   │  (Langfuse, Phoenix)      │                           │
+              └───────────────────────────┴───────────────────────────┘
+```
+
+The empty quadrant — *human-facing, at the moment of action* — is the product.
+Closest prior art, Superego/Creed (arXiv 2506.13774), reasons about a constitution
+*inside the model*. The Glass Box is **infrastructure-side and external**: a
+deterministic gate the agent cannot argue its way past, governed by a markdown
+file a human edits, surfaced as a card a human reads. We render and gate on the
+machine; they reason model-side. Complementary, not competing.
+
 ## Two rails — both readable markdown
 
-Governance is not reimplemented in Rust — it's delegated to **Tessera `.t.md`**
+Governance isn't reimplemented in Rust — it's delegated to **Tessera `.t.md`**
 files you can open, read, and edit. Blocked if *either* rail refuses:
 
-| Rail | Refuses what is… | Source | Path |
+| Rail | Refuses what is… | Source | Runs |
 | --- | --- | --- | --- |
-| **safety** | *irreversible* — rm -rf, force push, hard reset, table drop | `agents/safety.t.md` (patterns read at runtime) | in-process, always on |
-| **values** | *wrong* — extractive, unfair, repricing a loyal client | `~/Projects/walt/mind/conscience.t.md` (Conscience) | Tessera subprocess |
+| **safety** | *irreversible* — rm -rf, force push, hard reset, table drop | `agents/safety.t.md` (patterns read at runtime) | in-process, always on, never fails |
+| **values** | *wrong* — extractive, unfair, repricing a loyal client | `mind/conscience.t.md` (Conscience) | Tessera subprocess, pre-screened, fail-open |
 
-The two rails answer different questions. A force-push violates no *value* — it's
-not unfair — it's just unrecoverable. A values-only gate waves it through. You
-need both.
+The two answer different questions. A force-push violates no *value* — it's not
+unfair, it's just unrecoverable. A values-only gate waves it through. You need both.
 
-## Built for the live agent
+## Shadow-first — it can't break your workflow
 
-This is the Rust rewrite of the Python prototype (`~/Projects/walt/candor`),
-built to run on **every tool call** without slowing the agent:
+This runs on **every tool call**, so the prime directive is *do no harm to the
+human's flow*:
 
-- **Safety runs in-process** — pure string match, **~9ms**, no subprocess, no
-  failure mode. The hard floor that's always on.
+- **Shadow is structurally non-blocking.** The decision→output mapping is a pure
+  function whose shadow arm never even inspects whether the action was blocked —
+  so no future edit can make shadow deny without changing one obvious match. A
+  test asserts the hook output can never contain a deny in shadow, across every
+  combination of inputs.
+- **Safety runs in-process** — pure string match over patterns cached once at
+  startup, **p50 ~0.4µs / p99 ~0.7µs** (measured, release), no subprocess, no
+  failure mode. The hard floor.
 - **Values is pre-screened** — the Tessera subprocess only fires when the action
-  contains a values keyword (price/charge/casey/…); the 99% of commands with
-  nothing to do with money pay nothing.
-- **Values fails *open*** — a rare Tessera hiccup logs + emits a Nerve event but
-  does not block. A missed refusal during an outage is recoverable; a bricked
-  agent is not. Safety, which never fails, stays the floor.
+  contains a values keyword; the 99% of commands with nothing to do with money
+  pay **~7µs** and skip it entirely.
+- **Values fails *open*** — a Tessera hiccup logs and allows rather than bricking
+  the agent. A missed refusal during an outage is recoverable; a blocked agent is
+  not. Safety, which never fails, stays the floor.
+- **The hook can't crash a tool call** — its body is panic-caught; worst case it
+  silently defers.
+
+## Provenance — the *why*, not just the verdict
+
+Every decision carries its reasoning: the value it touches, the intent, where it
+escalates. The values rail's refusals also persist to Tessera's permanent
+governance audit graph (`~/.tessera/audit_governance.db`); `glassbox status` links
+the two stores so you can prove an agent did the right thing for the right reason —
+not reconstruct it from a log after the fact.
+
+## One gate, any agent
+
+The Claude Code hook is just one adapter over a generic, agent-agnostic core.
+Anything that can describe a proposed action can be governed:
+
+```bash
+echo '{"action":"git push --force","target":"git","agent":"my-agent"}' | glassbox gate-json
+# → {"decision":"would-refuse","blocked":true,"verdicts":[…],"card":"…","provenance_id":"gbx_…"}
+```
+
+`blocked` (what the gate decided) is deliberately separate from `decision` (what
+the mode allowed) — that separation is what makes shadow meaningful. MCP-native
+agents call the same core via the `glassbox_gate` tool (`mcp/glassbox_mcp.py`).
+**No Goose fork, no framework lock-in** — you own the wedge, not someone else's app.
+
+## Numbers
+
+Reproducible: `glassbox eval` (safety, no Tessera) and `glassbox eval --values`.
+
+| corpus | n | result | note |
+| --- | --- | --- | --- |
+| destructive (floor) | 12 | **12 caught (100%)** | the 12 declared patterns |
+| obfuscated (honest) | 6 | **1 caught (16.7%)** | 5 documented misses, 1 catch-control |
+| benign (false-pos) | 14 | **0 refused (0%)** | no friction on safe commands |
+| values violations | 2 | **2 refused** | reprice-loyal-client, gouge-stranger |
+| values benign | 2 | **0 refused** | the gate is not over-broad |
+
+The 16.7% on the obfuscated set is the point, not a flaw: the floor is 12 substrings
+**by design**, and the eval names every action it misses (`find -delete`, a Python
+`rmtree`, a fork bomb, truncate-by-redirect, recursive `chmod`). A trust layer that
+hides its blind spots isn't trustworthy. Widening the floor is a later, deliberate
+pass — for now it stays minimal, fast, and honest about its reach.
+
+Latency (release, in-process safety path): **p50 ~0.4µs, p99 ~0.7µs** (patterns are
+parsed once and cached for the process lifetime). Values subprocess (only on a
+keyword hit): ~140ms.
 
 ## Use
 
 ```bash
 cargo build --release
-glassbox demo                       # the proof: 4 of 6 actions blocked, each readably
-glassbox gate "git push --force"    # govern one action
-glassbox status                     # recent decisions
+glassbox demo                       # six governed actions, each rendered
+glassbox gate "git push --force"    # govern one action (enforce; exit 1 if blocked)
+echo '{"action":"…"}' | glassbox gate-json   # the generic API
+glassbox watch                      # live card stream as decisions happen
+glassbox status                     # recent decisions + Tessera provenance link
+glassbox eval                       # the benchmark
 ```
 
-## Wire it into Claude Code (the first integration)
+### Wire it into Claude Code (shadow)
 
-The Glass Box's first job is **Claude Code governing itself.** Add a PreToolUse
-hook so every Bash/Edit/Write passes through the gate (it *blocks* the dangerous
-ones with a readable reason shown to you and the model):
+The first integration is **Claude Code governing itself.** Add a PreToolUse hook;
+in shadow it renders a one-line `systemMessage` for each governed action and
+**blocks nothing**:
 
 ```json
 {
@@ -77,21 +161,24 @@ ones with a readable reason shown to you and the model):
 }
 ```
 
-Scoped to the tools that can do damage (not Read/Grep). Every decision streams a
-`glassbox:*` Nerve event and lands in `~/.glassbox/decisions.jsonl`.
+Every decision lands in `~/.glassbox/decisions.jsonl` (and streams a `glassbox:*`
+Nerve event). Run `glassbox watch` in a second pane to see the full cards live.
+To enforce instead of observe, set `GLASSBOX_MODE=enforce` — opt-in, never the
+default.
 
 ## Roadmap
 
-- **v1 (here):** Rust gate + trust-card + Claude Code PreToolUse hook.
-- **v2 — generalize:** fork **Goose** (Block, Apache-2.0, Rust, MCP-native) and
-  slot the rails into its `PermissionInspector` seam to govern *any* on-machine
-  agent.
-- **v3 — the face:** live card stream as a TUI, then a shareable web UI.
+- **v1 (here):** Rust gate · shadow + enforce modes · trust-card · provenance ·
+  generic `gate-json` + MCP · `watch` stream · reproducible eval.
+- **v2:** a native Rust MCP server (drop the Python shim) · per-surface enforcement
+  behind explicit flags · richer perceive adapters as real callers appear.
+- **v3 — the face:** the card stream as a shareable web UI.
 
 ## License
 
-MIT. Built on Tessera (the WALT runtime). v2 builds on Goose (Apache-2.0). We do
-not build on Screenpipe (commercial source-available) or Khoj (AGPL).
+MIT. Built on Tessera (the WALT runtime). The values rail reads Conscience; the
+safety floor is plain markdown you can edit. We do not build on Screenpipe
+(commercial source-available) or Khoj (AGPL).
 
-> Name note: "The Glass Box" also names an unrelated Solana project; it's a
-> generic interpretability term too. Chosen for community resonance with eyes open.
+> Name note: "The Glass Box" also names an unrelated Solana project and is a generic
+> interpretability term. Kept for community resonance, eyes open.

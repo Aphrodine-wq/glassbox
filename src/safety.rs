@@ -7,10 +7,15 @@
 
 use crate::gate::Verdict;
 use std::fs;
+use std::sync::OnceLock;
 
-fn patterns() -> Vec<String> {
+fn load_patterns() -> Vec<String> {
+    // Resolve the governance file: explicit override first, then the repo-relative
+    // default, then a co-located `agents/safety.t.md`. If none is found the hard
+    // fallback below keeps the floor populated, so a fresh clone still works.
     let home = std::env::var("HOME").unwrap_or_default();
-    let path = format!("{}/Projects/walt/glassbox/agents/safety.t.md", home);
+    let path = std::env::var("GLASSBOX_SAFETY_FILE")
+        .unwrap_or_else(|_| format!("{home}/Projects/walt/glassbox/agents/safety.t.md"));
     let mut pats = Vec::new();
     if let Ok(text) = fs::read_to_string(&path) {
         for line in text.lines() {
@@ -45,9 +50,20 @@ fn patterns() -> Vec<String> {
     pats
 }
 
+/// The forbidden substrings, parsed once and cached for the process lifetime.
+/// The markdown is still the only place the patterns are declared (the source of
+/// truth); it is simply read once per process instead of on every action. The
+/// per-action hook is one process per call, so behavior is identical — and on a
+/// long-running surface the floor is deliberately fixed for the run rather than
+/// mutating mid-flight under a live agent.
+fn patterns() -> &'static [String] {
+    static CACHE: OnceLock<Vec<String>> = OnceLock::new();
+    CACHE.get_or_init(load_patterns)
+}
+
 pub fn check(action: &str) -> Verdict {
     for p in patterns() {
-        if action.contains(&p) {
+        if action.contains(p.as_str()) {
             return Verdict {
                 rail: "safety".into(),
                 refused: true,
@@ -61,5 +77,84 @@ pub fn check(action: &str) -> Verdict {
         refused: false,
         reason: "clean".into(),
         policy: String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn catches_every_floor_pattern() {
+        // Each declared pattern, embedded in a realistic command, must refuse.
+        let cases = [
+            "rm -rf /tmp/x",
+            "rm -fr /tmp/x",
+            "git push origin main --force",
+            "git push -f origin main",
+            "git reset --hard HEAD~3",
+            "psql -c 'drop table users'",
+            "psql -c 'DROP TABLE users'",
+            "truncate -s 0 db.sql",
+            "delete from orders",
+            "DELETE FROM orders",
+            "mkfs.ext4 /dev/sda1",
+            "dd if=/dev/zero of=/dev/sda",
+        ];
+        for c in cases {
+            let v = check(c);
+            assert!(v.refused, "should refuse: {c}");
+            assert_eq!(v.policy, "Irreversible");
+        }
+    }
+
+    #[test]
+    fn allows_benign_commands() {
+        let benign = [
+            "git status",
+            "git commit -m 'wip'",
+            "cat README.md",
+            "ls -la",
+            "cargo build",
+            "npm test",
+            "mkdir build",
+            "grep -r TODO src",
+        ];
+        for c in benign {
+            assert!(!check(c).refused, "should allow: {c}");
+        }
+    }
+
+    #[test]
+    fn documents_known_floor_gaps() {
+        // The minimal floor is a deliberate choice (see plan: "keep it minimal").
+        // These obfuscated / indirect destructive actions are NOT caught — pinned
+        // here so the suite and the eval agree, and any future widening is a
+        // conscious diff, not an accident.
+        let known_misses = [
+            "find . -type f -delete",
+            "python3 -c \"import shutil; shutil.rmtree('/tmp/x')\"",
+            "rm\u{200b} -rf /tmp/x", // zero-width char splits the "rm -rf" substring
+            ":(){ :|:& };:",         // fork bomb
+            "> important.db",        // truncate-by-redirect
+        ];
+        for c in known_misses {
+            assert!(!check(c).refused, "documented as a known miss: {c:?}");
+        }
+    }
+
+    #[test]
+    fn fallback_keeps_floor_populated_when_file_missing() {
+        let _guard = crate::test_support::ENV_LOCK.lock().unwrap();
+        let prev = std::env::var("HOME").ok();
+        // Point HOME where no safety.t.md exists → patterns() uses the fallback.
+        std::env::set_var("HOME", "/nonexistent-glassbox-test-home");
+        let pats = load_patterns();
+        match prev {
+            Some(h) => std::env::set_var("HOME", h),
+            None => std::env::remove_var("HOME"),
+        }
+        assert!(pats.len() >= 12, "fallback must keep the floor populated");
+        assert!(pats.iter().any(|p| p == "rm -rf"));
     }
 }

@@ -1,52 +1,41 @@
 //! Audit trail + Nerve event stream. Best-effort; governance never fails because
-//! logging did.
+//! logging did. `~/.glassbox/decisions.jsonl` is the system of record — each line
+//! is the structured decision (verdicts + synthesized provenance + id + mode), so
+//! `status` and `watch` can reconstruct the card without a separate store.
 
-use crate::gate::Verdict;
+use crate::protocol::GateResponse;
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::Write;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-pub fn record(action: &str, target: &str, verdicts: &[Verdict], blocked: bool, reason: &str) {
-    let t = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
+pub fn record(resp: &GateResponse) {
     let home = std::env::var("HOME").unwrap_or_default();
+    let entry = resp.to_value();
 
-    let vlist: Vec<_> = verdicts
-        .iter()
-        .map(|v| serde_json::json!({"rail": v.rail, "refused": v.refused, "reason": v.reason}))
-        .collect();
-    let entry = serde_json::json!({
-        "t": t, "action": action, "target": target,
-        "verdicts": vlist, "blocked": blocked, "reason": reason,
-    });
-
-    let dir = format!("{}/.glassbox", home);
+    let dir = format!("{home}/.glassbox");
     let _ = create_dir_all(&dir);
     if let Ok(mut f) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(format!("{}/decisions.jsonl", dir))
+        .open(format!("{dir}/decisions.jsonl"))
     {
-        let _ = writeln!(f, "{}", entry);
+        let _ = writeln!(f, "{entry}");
     }
 
     // Nerve event stream — only if the bus dir exists.
-    let nerve_dir = format!("{}/.claude/nerve", home);
+    let nerve_dir = format!("{home}/.claude/nerve");
     if std::path::Path::new(&nerve_dir).is_dir() {
         let ev = serde_json::json!({
-            "t": t,
-            "type": if blocked { "glassbox:blocked" } else { "glassbox:allowed" },
+            "t": resp.t,
+            "type": if resp.blocked { "glassbox:blocked" } else { "glassbox:allowed" },
             "source": "glassbox",
             "data": entry,
         });
         if let Ok(mut f) = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(format!("{}/events.jsonl", nerve_dir))
+            .open(format!("{nerve_dir}/events.jsonl"))
         {
-            let _ = writeln!(f, "{}", ev);
+            let _ = writeln!(f, "{ev}");
         }
     }
 }
