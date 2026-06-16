@@ -1,0 +1,17 @@
+[package]
+name = "glassbox"
+version = "0.1.0"
+edition = "2021"
+description = "The Glass Box — a governance trust-layer that makes an agent's actions legible and governed at the moment they happen."
+license = "MIT"
+
+[dependencies]
+serde_json = "1"
+
+[[bin]]
+name = "glassbox"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
