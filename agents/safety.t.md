@@ -39,6 +39,7 @@ policy Irreversible {
   forbid contains "mkfs"
   forbid contains "dd if="
   forbid contains "shutil.rmtree"
+  forbid contains ":(){"
 }
 ```
 

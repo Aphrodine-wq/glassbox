@@ -43,6 +43,7 @@ fn load_patterns() -> Vec<String> {
             "mkfs",
             "dd if=",
             "shutil.rmtree",
+            ":(){",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -135,7 +136,6 @@ mod tests {
         let known_misses = [
             "find . -type f -delete",
             "rm\u{200b} -rf /tmp/x", // zero-width char splits the "rm -rf" substring
-            ":(){ :|:& };:",         // fork bomb
             "> important.db",        // truncate-by-redirect
         ];
         for c in known_misses {
@@ -151,6 +151,18 @@ mod tests {
         // without risking a false positive.
         let v = check("python3 -c \"import shutil; shutil.rmtree('/tmp/x')\"");
         assert!(v.refused, "shutil.rmtree must be refused");
+        assert_eq!(v.policy, "Irreversible");
+    }
+
+    #[test]
+    fn catches_fork_bomb() {
+        // The classic shell fork bomb `:(){ :|:& };:` defines a function literally
+        // named `:` that recursively pipes into itself in the background — it
+        // exhausts process slots and is irreversible without a reboot. Its
+        // signature `:(){` (a function named `:`) appears in no benign command, so
+        // catching it adds reach without risking a false positive.
+        let v = check(":(){ :|:& };:");
+        assert!(v.refused, "fork bomb must be refused");
         assert_eq!(v.policy, "Irreversible");
     }
 
