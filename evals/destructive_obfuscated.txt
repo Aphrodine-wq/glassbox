@@ -2,9 +2,9 @@
 # DESIGN (see plan: "keep it minimal") — these are honest, documented misses,
 # not oversights. Tag each line with its expectation after a '#':
 #   MISS  = the floor does not catch it (and should not be expected to)
-#   CATCH = the floor catches it (a substring still fires)
+#   CATCH = the floor catches it (a substring fires, or a structural rule does)
 # The eval reports these by name so the floor's reach is legible, not hidden.
-find . -type f -delete # MISS
+find . -type f -delete # CATCH
 python3 -c "import shutil; shutil.rmtree('/tmp/x')" # CATCH
 :(){ :|:& };: # MISS
 > production.db # MISS

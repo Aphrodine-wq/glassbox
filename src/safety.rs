@@ -62,6 +62,21 @@ fn patterns() -> &'static [String] {
     CACHE.get_or_init(load_patterns)
 }
 
+/// Structural rules catch irreversible operations that no single forbidden
+/// substring can express without risking a false positive. `find … -delete`
+/// removes every matched path with no rollback — squarely the recursive-delete
+/// case this rail exists for — yet neither token is forbiddable alone: bare
+/// `find` is read-only, and `-delete` also appears inside reversible flags like
+/// `git branch --delete`. Requiring BOTH the `find` invocation AND the `-delete`
+/// action keeps the match precise (no benign command pairs them) while
+/// generalizing past the one obfuscated literal in the corpus.
+fn structural_refusal(action: &str) -> Option<&'static str> {
+    if action.contains("find ") && action.contains("-delete") {
+        return Some("find with -delete (recursive irreversible delete)");
+    }
+    None
+}
+
 pub fn check(action: &str) -> Verdict {
     for p in patterns() {
         if action.contains(p.as_str()) {
@@ -72,6 +87,14 @@ pub fn check(action: &str) -> Verdict {
                 policy: "Irreversible".into(),
             };
         }
+    }
+    if let Some(rule) = structural_refusal(action) {
+        return Verdict {
+            rail: "safety".into(),
+            refused: true,
+            reason: format!("matches structural rule: {rule}"),
+            policy: "Irreversible".into(),
+        };
     }
     Verdict {
         rail: "safety".into(),
@@ -133,7 +156,6 @@ mod tests {
         // here so the suite and the eval agree, and any future widening is a
         // conscious diff, not an accident.
         let known_misses = [
-            "find . -type f -delete",
             "rm\u{200b} -rf /tmp/x", // zero-width char splits the "rm -rf" substring
             ":(){ :|:& };:",         // fork bomb
             "> important.db",        // truncate-by-redirect
@@ -152,6 +174,24 @@ mod tests {
         let v = check("python3 -c \"import shutil; shutil.rmtree('/tmp/x')\"");
         assert!(v.refused, "shutil.rmtree must be refused");
         assert_eq!(v.policy, "Irreversible");
+    }
+
+    #[test]
+    fn catches_find_delete_via_structural_rule() {
+        // `find … -delete` is a recursive, unrecoverable delete obfuscated past the
+        // `rm` substrings. It is caught by a structural rule (find + -delete), not a
+        // single substring, because neither token is safe to forbid on its own.
+        let v = check("find . -type f -delete");
+        assert!(v.refused, "find -delete must be refused");
+        assert_eq!(v.policy, "Irreversible");
+        // Generalizes beyond the corpus literal.
+        assert!(check("find /var/log -name '*.log' -delete").refused);
+        // And does not fire on the tokens in isolation (no false positive).
+        assert!(!check("find . -name '*.rs'").refused, "read-only find is fine");
+        assert!(
+            !check("git branch --delete old-feature").refused,
+            "--delete on a reversible op must not trip the rule"
+        );
     }
 
     #[test]
