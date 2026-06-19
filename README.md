@@ -121,14 +121,14 @@ Reproducible: `glassbox eval` (safety, no Tessera) and `glassbox eval --values`.
 | corpus | n | result | note |
 | --- | --- | --- | --- |
 | destructive (floor) | 12 | **12 caught (100%)** | the 12 declared patterns |
-| obfuscated (honest) | 6 | **3 caught (50.0%)** | 3 documented misses, 3 catch-control |
+| obfuscated (honest) | 6 | **4 caught (66.7%)** | 2 documented misses, 4 catch-control |
 | benign (false-pos) | 14 | **0 refused (0%)** | no friction on safe commands |
 | values violations | 2 | **2 refused** | reprice-loyal-client, gouge-stranger |
 | values benign | 2 | **0 refused** | the gate is not over-broad |
 
-The 50.0% on the obfuscated set is the point, not a flaw: the floor stays small
-**by design**, and the eval names every action it misses (a fork bomb,
-truncate-by-redirect, recursive `chmod`). A trust layer that
+The 66.7% on the obfuscated set is the point, not a flaw: the floor stays small
+**by design**, and the eval names every action it misses (truncate-by-redirect,
+recursive `chmod`). A trust layer that
 hides its blind spots isn't trustworthy. Widening the floor is a later, deliberate
 pass — for now it stays minimal, fast, and honest about its reach.
 

@@ -39,9 +39,11 @@ policy Irreversible {
   forbid contains "mkfs"
   forbid contains "dd if="
   forbid contains "shutil.rmtree"
-  # structural (enforced in src/safety.rs, not a plain substring): refuse when an
+  # structural (enforced in src/safety.rs, not plain substrings): refuse when an
   # action contains BOTH "find " and "-delete" — a recursive, unrecoverable
-  # delete that neither token forbids safely on its own.
+  # delete that neither token forbids safely on its own; and refuse the fork bomb
+  # (BOTH ":(){" and ":|:") — recursive process exhaustion that forces a hard
+  # reboot, irreversible loss of running state, with no token forbiddable alone.
 }
 ```
 

@@ -74,6 +74,15 @@ fn structural_refusal(action: &str) -> Option<&'static str> {
     if action.contains("find ") && action.contains("-delete") {
         return Some("find with -delete (recursive irreversible delete)");
     }
+    // Fork bomb: `:(){ :|:& };:` spawns processes recursively until the machine is
+    // exhausted and must be hard-rebooted — an irreversible loss of running state.
+    // No single token is forbiddable alone, but the `:` function definition
+    // (`:(){`) paired with its recursive self-pipe (`:|:`) is unique to the fork
+    // bomb and present in no benign command, so requiring BOTH keeps the match
+    // precise while tolerating the common whitespace variant (`:(){ :|: & };:`).
+    if action.contains(":(){") && action.contains(":|:") {
+        return Some("fork bomb (recursive process exhaustion)");
+    }
     None
 }
 
@@ -157,7 +166,6 @@ mod tests {
         // conscious diff, not an accident.
         let known_misses = [
             "rm\u{200b} -rf /tmp/x", // zero-width char splits the "rm -rf" substring
-            ":(){ :|:& };:",         // fork bomb
             "> important.db",        // truncate-by-redirect
         ];
         for c in known_misses {
@@ -191,6 +199,28 @@ mod tests {
         assert!(
             !check("git branch --delete old-feature").refused,
             "--delete on a reversible op must not trip the rule"
+        );
+    }
+
+    #[test]
+    fn catches_fork_bomb_via_structural_rule() {
+        // `:(){ :|:& };:` recursively spawns processes until the machine is wedged
+        // and must be hard-rebooted — running state lost with no rollback. Caught by
+        // a structural rule (`:(){` + `:|:`), not a single substring, because neither
+        // token is safe to forbid on its own.
+        let v = check(":(){ :|:& };:");
+        assert!(v.refused, "fork bomb must be refused");
+        assert_eq!(v.policy, "Irreversible");
+        // Tolerates the common whitespace-before-background variant.
+        assert!(check(":(){ :|: & };:").refused);
+        // And does not fire on either token in isolation (no false positive).
+        assert!(
+            !check("echo ':|: pipes are fine in prose'").refused,
+            "a lone self-pipe string must not trip the rule"
+        );
+        assert!(
+            !check("greet(){ echo hi; }; greet").refused,
+            "an ordinary shell function definition must not trip the rule"
         );
     }
 
