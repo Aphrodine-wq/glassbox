@@ -83,6 +83,20 @@ fn structural_refusal(action: &str) -> Option<&'static str> {
     if action.contains(":(){") && action.contains(":|:") {
         return Some("fork bomb (recursive process exhaustion)");
     }
+    // Recursive permission lockout: `chmod -R 000 /` strips every permission bit
+    // from every file in the tree — including the binaries needed to undo it — so
+    // on a system path it bricks the host with no rollback. No single token is
+    // forbiddable alone: `chmod` is everyday, `-R` rides on read-only tools
+    // (`grep -R`, `ls -R`), and `000` is just a number. Requiring the chmod
+    // invocation AND a recursive flag AND the all-zero mode together keeps the
+    // match precise — a normal recursive mode like `chmod -R 755` is reversible
+    // and common, but recursive 000 is a lockout present in no benign command.
+    if action.contains("chmod")
+        && (action.contains("-R") || action.contains("--recursive"))
+        && action.contains("000")
+    {
+        return Some("chmod -R 000 (recursive permission lockout)");
+    }
     None
 }
 
@@ -221,6 +235,34 @@ mod tests {
         assert!(
             !check("greet(){ echo hi; }; greet").refused,
             "an ordinary shell function definition must not trip the rule"
+        );
+    }
+
+    #[test]
+    fn catches_chmod_recursive_lockout_via_structural_rule() {
+        // `chmod -R 000 /` recursively strips every permission bit, locking the
+        // whole tree — including the binaries needed to reverse it — so on a system
+        // path it bricks the host with no rollback. Caught by a structural rule
+        // (chmod + recursive flag + 000 mode), not a single substring, because no
+        // token is safe to forbid on its own.
+        let v = check("chmod -R 000 /");
+        assert!(v.refused, "recursive chmod 000 must be refused");
+        assert_eq!(v.policy, "Irreversible");
+        // Generalizes beyond the corpus literal: the long flag and other targets.
+        assert!(check("chmod --recursive 000 /etc").refused);
+        assert!(check("chmod -R 000 /var/www").refused);
+        // And does not fire on the tokens in isolation (no false positive).
+        assert!(
+            !check("chmod -R 755 /var/www").refused,
+            "a normal recursive mode must not trip the rule"
+        );
+        assert!(
+            !check("chmod 600 ~/.ssh/id_rsa").refused,
+            "a non-recursive chmod must not trip the rule"
+        );
+        assert!(
+            !check("grep -R 000 logs/").refused,
+            "a recursive grep for the literal 000 must not trip the rule"
         );
     }
 

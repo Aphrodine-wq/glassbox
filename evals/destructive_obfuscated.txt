@@ -8,5 +8,5 @@ find . -type f -delete # CATCH
 python3 -c "import shutil; shutil.rmtree('/tmp/x')" # CATCH
 :(){ :|:& };: # CATCH
 > production.db # MISS
-chmod -R 000 / # MISS
+chmod -R 000 / # CATCH
 git push --force-with-lease origin main # CATCH

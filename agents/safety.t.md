@@ -41,9 +41,12 @@ policy Irreversible {
   forbid contains "shutil.rmtree"
   # structural (enforced in src/safety.rs, not plain substrings): refuse when an
   # action contains BOTH "find " and "-delete" — a recursive, unrecoverable
-  # delete that neither token forbids safely on its own; and refuse the fork bomb
+  # delete that neither token forbids safely on its own; refuse the fork bomb
   # (BOTH ":(){" and ":|:") — recursive process exhaustion that forces a hard
-  # reboot, irreversible loss of running state, with no token forbiddable alone.
+  # reboot, irreversible loss of running state, with no token forbiddable alone;
+  # and refuse a recursive permission lockout (chmod + a recursive flag + the
+  # "000" mode) — strips every permission in the tree, including the binaries
+  # needed to undo it, with no token forbiddable alone.
 }
 ```
 
