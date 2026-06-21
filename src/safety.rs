@@ -97,6 +97,33 @@ fn structural_refusal(action: &str) -> Option<&'static str> {
     {
         return Some("chmod -R 000 (recursive permission lockout)");
     }
+    // Truncate-by-redirect: a *leading* output redirect (the action begins with
+    // `>`) opens its target for writing and truncates it to zero length — and
+    // with no command in front of the redirect there is nothing to repopulate
+    // it, so the file's contents are wiped with no rollback (`> production.db`).
+    // We match ONLY the leading-redirect idiom: a redirect that *follows* a
+    // command (`echo x > f`, `cmd > out.log`) is the ordinary way to write output
+    // and is deliberately NOT matched, so no benign command trips. Append (`>>`)
+    // never truncates and is excluded; truncating `/dev/null` is a harmless
+    // no-op; and fd-dups (`>&2`) / process substitution (`>(…)`) are not file
+    // wipes — all excluded so the match stays precise.
+    {
+        let t = action.trim_start();
+        if let Some(rest) = t.strip_prefix('>') {
+            if !rest.starts_with('>') {
+                // tolerate the explicit-clobber form `>| file` (still a truncate)
+                let rest = rest.strip_prefix('|').unwrap_or(rest);
+                let target = rest.trim_start();
+                if !target.is_empty()
+                    && !target.starts_with("/dev/null")
+                    && !target.starts_with('&')
+                    && !target.starts_with('(')
+                {
+                    return Some("leading > redirect (truncate-by-redirect wipes file contents)");
+                }
+            }
+        }
+    }
     None
 }
 
@@ -180,7 +207,6 @@ mod tests {
         // conscious diff, not an accident.
         let known_misses = [
             "rm\u{200b} -rf /tmp/x", // zero-width char splits the "rm -rf" substring
-            "> important.db",        // truncate-by-redirect
         ];
         for c in known_misses {
             assert!(!check(c).refused, "documented as a known miss: {c:?}");
@@ -263,6 +289,41 @@ mod tests {
         assert!(
             !check("grep -R 000 logs/").refused,
             "a recursive grep for the literal 000 must not trip the rule"
+        );
+    }
+
+    #[test]
+    fn catches_truncate_by_redirect_via_structural_rule() {
+        // `> production.db` is a leading output redirect: it opens the file for
+        // writing and truncates it to zero length, and with no command in front
+        // there is nothing to refill it — the contents are wiped irreversibly.
+        // Caught by a structural rule (a leading `>` redirect to a real target),
+        // not a substring, because a bare `>` appears in countless benign output
+        // redirects and is only destructive when it leads the command.
+        let v = check("> production.db");
+        assert!(v.refused, "truncate-by-redirect must be refused");
+        assert_eq!(v.policy, "Irreversible");
+        // Generalizes beyond the corpus literal: leading whitespace and the
+        // explicit-clobber form both still truncate.
+        assert!(check("  > important.db").refused);
+        assert!(check(">| state.json").refused);
+        // And does not fire on the tokens in isolation (no false positive):
+        // a redirect that FOLLOWS a command is the normal way to write output.
+        assert!(
+            !check("echo hello > greeting.txt").refused,
+            "a redirect after a command must not trip the rule"
+        );
+        assert!(
+            !check("cargo build > build.log 2>&1").refused,
+            "redirecting command output must not trip the rule"
+        );
+        assert!(
+            !check("grep -rn TODO src/ > /dev/null").refused,
+            "redirecting to /dev/null must not trip the rule"
+        );
+        assert!(
+            !check(">> append-only.log").refused,
+            "append (>>) never truncates and must not trip the rule"
         );
     }
 

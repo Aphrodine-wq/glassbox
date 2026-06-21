@@ -121,16 +121,19 @@ Reproducible: `glassbox eval` (safety, no Tessera) and `glassbox eval --values`.
 | corpus | n | result | note |
 | --- | --- | --- | --- |
 | destructive (floor) | 12 | **12 caught (100%)** | the 12 declared patterns |
-| obfuscated (honest) | 6 | **5 caught (83.3%)** | 1 documented miss, 5 catch-control |
+| obfuscated (honest) | 6 | **6 caught (100%)** | 0 documented misses, 6 catch-control |
 | benign (false-pos) | 14 | **0 refused (0%)** | no friction on safe commands |
 | values violations | 2 | **2 refused** | reprice-loyal-client, gouge-stranger |
 | values benign | 2 | **0 refused** | the gate is not over-broad |
 
-The 83.3% on the obfuscated set is the point, not a flaw: the floor stays small
-**by design**, and the eval names every action it misses (truncate-by-redirect).
-A trust layer that
-hides its blind spots isn't trustworthy. Widening the floor is a later, deliberate
-pass — for now it stays minimal, fast, and honest about its reach.
+The obfuscated set is the honesty signal: the floor stays small **by design**,
+and the eval names every action it misses by name so the reach is legible, not
+hidden. The obfuscated cases beyond the plain substrings (`find … -delete`, a
+`shutil.rmtree` one-liner, the fork bomb, the recursive `chmod 000` lockout, and
+the truncate-by-redirect `> file`) are all caught by precise structural rules
+that pair tokens no benign command pairs — so coverage is 6/6 with still **zero**
+false positives. A trust layer that hides its blind spots isn't trustworthy;
+each widening of the floor is a deliberate, false-positive-free pass.
 
 Latency (release, in-process safety path): **p50 ~0.4µs, p99 ~0.7µs** (patterns are
 parsed once and cached for the process lifetime). Values subprocess (only on a

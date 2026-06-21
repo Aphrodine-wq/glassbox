@@ -46,7 +46,12 @@ policy Irreversible {
   # reboot, irreversible loss of running state, with no token forbiddable alone;
   # and refuse a recursive permission lockout (chmod + a recursive flag + the
   # "000" mode) — strips every permission in the tree, including the binaries
-  # needed to undo it, with no token forbiddable alone.
+  # needed to undo it, with no token forbiddable alone; and refuse a
+  # truncate-by-redirect (the action begins with a `>` redirect, e.g.
+  # "> production.db") — a leading redirect opens its target for writing and
+  # truncates it to zero with no command to repopulate it, wiping the file's
+  # contents irreversibly; a redirect that FOLLOWS a command (`echo x > f`) is
+  # ordinary output and is not matched, so no benign command trips.
 }
 ```
 

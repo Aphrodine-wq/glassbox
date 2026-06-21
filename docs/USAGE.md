@@ -181,6 +181,13 @@ once per process. Point the gate at a different file with `GLASSBOX_SAFETY_FILE`
 If no file is found, a built-in fallback keeps the 13 default patterns active, so
 a fresh clone always has a floor.
 
+Beyond the plain substrings, a few structural rules (in `src/safety.rs`) catch
+obfuscated irreversible actions that no single token can express without a false
+positive: `find … -delete`, a `shutil.rmtree` one-liner, the fork bomb, a
+recursive `chmod 000` lockout, and a truncate-by-redirect (`> file`). Each pairs
+tokens that no benign command pairs, so the obfuscated eval is 6/6 caught with
+zero false positives — no documented misses remain.
+
 ### Values (the wrongness rail)
 
 By default the values rail uses a native, in-process oracle that refuses
@@ -222,6 +229,6 @@ times out, the action is allowed (safety, which never fails, stays the floor).
 
 ```bash
 cargo test           # full suite
-glassbox eval        # 12/12 destructive caught, 0/14 false positives, misses named
+glassbox eval        # 12/12 destructive + 6/6 obfuscated caught, 0/14 false positives
 glassbox demo        # watch the rails decide on real actions
 ```
