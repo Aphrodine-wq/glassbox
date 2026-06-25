@@ -39,6 +39,18 @@ pub fn synthesize(v: &Verdict, action: &str) -> Provenance {
         };
     }
 
+    if v.rail == "envelope" {
+        return Provenance {
+            source: "glassbox/envelope".into(),
+            policy: non_empty(&v.policy, "OutOfScope"),
+            value: "containment".into(),
+            intent: "scope_action".into(),
+            escalation: "a human widens the scope or budget".into(),
+            tessera_seq: None,
+            tessera_created_at: None,
+        };
+    }
+
     // values / conscience — map the action to the moral foundation it offends.
     // Loyalty is checked first: repricing a loyal client (the loyalty rule) is a
     // loyalty violation even though "reprice" also reads as a fairness keyword.

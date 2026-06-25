@@ -1,0 +1,6 @@
+{
+  "_comment": "Demo governance envelope for the wrap-a-foreign-agent demo. Loaded ONLY via GLASSBOX_ENVELOPE_FILE so the live Claude Code hook stays fail-open. The agent may read inside ~/demo and reach no network hosts; everything else is out of scope. 'reserved' is omitted so the built-in reserved floor re-arms.",
+  "allowed_paths": ["~/demo"],
+  "allowed_hosts": [],
+  "max_actions_per_hour": 0
+}

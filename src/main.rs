@@ -7,6 +7,7 @@
 
 mod audit;
 mod card;
+mod envelope;
 mod eval;
 mod gate;
 mod mode;
@@ -14,6 +15,7 @@ mod protocol;
 mod provenance;
 mod safety;
 mod values;
+mod verify;
 mod watch;
 
 use std::io::Read;
@@ -33,6 +35,7 @@ fn main() {
     let code = match cmd {
         "hook" => cmd_hook(),
         "gate-json" => cmd_gate_json(),
+        "verify" => cmd_verify(),
         "demo" => cmd_demo(),
         "gate" => cmd_gate(&args),
         "status" => cmd_status(),
@@ -41,7 +44,7 @@ fn main() {
         _ => {
             eprintln!("The Glass Box — governance trust-layer");
             eprintln!(
-                "usage: glassbox [hook | gate-json | demo | gate <action> [target] | status | watch | eval [--values]]"
+                "usage: glassbox [hook | gate-json | verify | demo | gate <action> [target] | status | watch | eval [--values]]"
             );
             2
         }
@@ -128,6 +131,39 @@ fn cmd_gate_json() -> i32 {
     let resp = protocol::run_gate(&req);
     println!("{}", resp.to_json_with_card());
     0
+}
+
+/// Behavioural verification: stdin `{agent, declared, trace}` in, `{verified,
+/// findings}` out. Proves the agent's actual trace == its declared plan (the
+/// second moment of governance, after the pre-action gate). Fail-closed: exit 1
+/// when unverified, so a caller can gate on it.
+fn cmd_verify() -> i32 {
+    let mut input = String::new();
+    if std::io::stdin().read_to_string(&mut input).is_err() {
+        println!("{{}}");
+        return 1;
+    }
+    let v: serde_json::Value = match serde_json::from_str(&input) {
+        Ok(v) => v,
+        Err(_) => {
+            eprintln!("glassbox: invalid JSON request");
+            println!("{{}}");
+            return 1;
+        }
+    };
+    let empty = serde_json::json!({});
+    let declared = v.get("declared").unwrap_or(&empty);
+    let trace = v.get("trace").unwrap_or(&empty);
+    let verdict = verify::verify(declared, trace);
+    println!(
+        "{}",
+        serde_json::json!({ "verified": verdict.verified, "findings": verdict.findings })
+    );
+    if verdict.verified {
+        0
+    } else {
+        1
+    }
 }
 
 /// The proof: six proposed actions a real agent might take, each governed.

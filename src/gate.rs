@@ -4,7 +4,7 @@
 //! (fast, in-process, never fails), `values` refuses what is *wrong* (governed by
 //! the Conscience markdown, fail-open on infra error). Blocked if EITHER refuses.
 
-use crate::{safety, values};
+use crate::{envelope, safety, values};
 
 pub struct Verdict {
     pub rail: String,
@@ -70,7 +70,9 @@ pub fn evaluate_with(
         return vec![s];
     }
     let v = values::check_with(action, target, oracle);
-    vec![v, s]
+    let e = envelope::check(action, target);
+    // Envelope first so a scope/budget refusal surfaces as the headline reason.
+    vec![e, v, s]
 }
 
 /// Collapse rail verdicts: blocked if ANY rail refused.
@@ -191,9 +193,11 @@ mod tests {
     }
 
     #[test]
-    fn evaluate_runs_both_rails_when_safety_clean() {
+    fn evaluate_runs_all_rails_when_safety_clean() {
+        // Three rails now: envelope + values + safety. With no governance file
+        // the envelope is fail-open, so a benign action passes all three.
         let verdicts = evaluate_with("git status", "shell", false, &CleanOracle);
-        assert_eq!(verdicts.len(), 2);
-        assert!(!verdicts[0].refused && !verdicts[1].refused);
+        assert_eq!(verdicts.len(), 3);
+        assert!(verdicts.iter().all(|v| !v.refused));
     }
 }
