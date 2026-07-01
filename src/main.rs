@@ -8,7 +8,9 @@
 mod audit;
 mod card;
 mod eval;
+mod fleet;
 mod gate;
+mod web;
 mod mode;
 mod protocol;
 mod provenance;
@@ -37,11 +39,14 @@ fn main() {
         "gate" => cmd_gate(&args),
         "status" => cmd_status(),
         "watch" => watch::cmd_watch(&args),
+        "fleet" => fleet::run(&args),
+        "serve" => web::run(&args),
+        "key" => web::cmd_key(&args),
         "eval" => eval::cmd_eval(&args),
         _ => {
             eprintln!("The Glass Box — governance trust-layer");
             eprintln!(
-                "usage: glassbox [hook | gate-json | demo | gate <action> [target] | status | watch | eval [--values]]"
+                "usage: glassbox [hook | gate-json | demo | gate | status | watch | fleet | serve | key | eval]"
             );
             2
         }

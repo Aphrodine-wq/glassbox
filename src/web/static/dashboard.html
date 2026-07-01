@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glassbox</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: #fafafa;
+    color: #111;
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Nav ───────────────────────────────────── */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 52px;
+    padding: 0 24px;
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .nav-left { display: flex; align-items: center; gap: 20px; }
+  .wordmark {
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.3px;
+    color: #111;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .wordmark svg { flex-shrink: 0; }
+  .nav-sep { width: 1px; height: 20px; background: #e0e0e0; }
+  .nav-label {
+    font-size: 13px;
+    color: #666;
+    font-weight: 400;
+  }
+  .live-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+    margin-right: 5px;
+    animation: blink 2.5s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+  .nav-right { display: flex; align-items: center; gap: 8px; }
+  .btn-sm {
+    height: 32px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    border: 1px solid #d4d4d4;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    text-decoration: none;
+    transition: border-color .15s, background .15s;
+  }
+  .btn-sm:hover { border-color: #999; background: #fafafa; }
+  .btn-sm svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
+
+  /* ── Page ──────────────────────────────────── */
+  .page { max-width: 1200px; margin: 0 auto; padding: 28px 24px 60px; }
+
+  /* ── Metrics row ──────────────────────────── */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: #e5e5e5;
+    border: 1px solid #e5e5e5;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 28px;
+  }
+  .metric {
+    background: #fff;
+    padding: 20px 22px;
+  }
+  .metric-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #888;
+    margin-bottom: 4px;
+  }
+  .metric-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .metric-value {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    color: #111;
+    line-height: 1.15;
+  }
+  .metric-change {
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .metric-change.neg { color: #dc2626; }
+  .metric-change.pos { color: #16a34a; }
+  .metric-change.neutral { color: #888; }
+
+  @media (max-width: 700px) {
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ── Section header ───────────────────────── */
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111;
+  }
+  .section-sub {
+    font-size: 12px;
+    color: #999;
+  }
+
+  /* ── Two-col layout ───────────────────────── */
+  .cols {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 800px) {
+    .cols { grid-template-columns: 1fr; }
+  }
+
+  /* ── Card ──────────────────────────────────── */
+  .card {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .card-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+  }
+  .card-head span {
+    font-weight: 400;
+    color: #999;
+    font-size: 12px;
+  }
+
+  /* ── Agent list ────────────────────────────── */
+  .agent {
+    padding: 12px 18px;
+    border-bottom: 1px solid #f5f5f5;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .agent:last-child { border-bottom: none; }
+  .agent:hover { background: #fafafa; }
+  .agent.sel { background: #f5f8ff; border-left: 2px solid #111; }
+  .agent-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .agent-id {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #111;
+  }
+  .indicator {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .indicator.g { background: #22c55e; }
+  .indicator.r { background: #dc2626; }
+  .indicator.y { background: #f59e0b; }
+  .tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  .tag-enf { background: #fef2f2; color: #b91c1c; }
+  .tag-shd { background: #eff6ff; color: #1d4ed8; }
+  .agent-detail {
+    display: flex;
+    gap: 12px;
+    margin-top: 5px;
+    padding-left: 15px;
+    font-size: 12px;
+    color: #999;
+  }
+  .agent-detail b { color: #555; font-weight: 500; }
+
+  /* ── Filters ───────────────────────────────── */
+  .filters {
+    display: flex;
+    gap: 4px;
+    padding: 10px 18px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .fbtn {
+    height: 28px;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 5px;
+    border: none;
+    background: transparent;
+    color: #888;
+    cursor: pointer;
+    transition: all .1s;
+  }
+  .fbtn:hover { color: #333; background: #f5f5f5; }
+  .fbtn.on { color: #111; background: #f0f0f0; }
+
+  /* ── Audit table ───────────────────────────── */
+  .audit-list { max-height: 620px; overflow-y: auto; }
+  .row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    gap: 10px;
+    align-items: start;
+    padding: 11px 18px;
+    border-bottom: 1px solid #f5f5f5;
+    font-size: 13px;
+    transition: background .08s;
+  }
+  .row:hover { background: #fafafa; }
+  .row:last-child { border-bottom: none; }
+  .verdict-dot {
+    width: 20px; height: 20px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    margin-top: 1px;
+  }
+  .verdict-dot.ok { background: #f0fdf4; color: #16a34a; }
+  .verdict-dot.no { background: #fef2f2; color: #dc2626; }
+  .verdict-dot.wr { background: #fff7ed; color: #ea580c; }
+  .row-body { min-width: 0; }
+  .row-action {
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12.5px;
+    color: #222;
+    word-break: break-all;
+  }
+  .row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 3px;
+    font-size: 11px;
+    color: #aaa;
+  }
+  .row-meta .pipe { color: #ddd; }
+  .rail { font-weight: 500; }
+  .rail.clean { color: #22c55e; }
+  .rail.refused { color: #dc2626; }
+  .row-reason {
+    margin-top: 3px;
+    font-size: 11.5px;
+    color: #b91c1c;
+    line-height: 1.4;
+  }
+  .row-right {
+    text-align: right;
+    white-space: nowrap;
+    font-size: 12px;
+    color: #bbb;
+    padding-top: 2px;
+  }
+  .row-verdict {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+  }
+  .row-verdict.ok { color: #16a34a; }
+  .row-verdict.no { color: #dc2626; }
+  .row-verdict.wr { color: #ea580c; }
+  .row-agent {
+    font-size: 11px;
+    color: #999;
+  }
+
+  .empty {
+    padding: 48px;
+    text-align: center;
+    color: #aaa;
+    font-size: 13px;
+  }
+  .empty code {
+    background: #f5f5f5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-left">
+    <div class="wordmark">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v18"/></svg>
+      Glassbox
+    </div>
+    <div class="nav-sep"></div>
+    <div class="nav-label"><span class="live-dot"></span>Monitoring <span id="agent-total">0</span> agents</div>
+  </div>
+  <div class="nav-right">
+    <a href="/api/report" class="btn-sm" download>
+      <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export CSV
+    </a>
+  </div>
+</nav>
+
+<div class="page">
+
+  <div class="metrics" id="metrics">
+    <div class="metric">
+      <div class="metric-label">Decisions</div>
+      <div class="metric-row">
+        <div class="metric-value" id="m-decisions">-</div>
+        <div class="metric-change neutral" id="m-decisions-note"></div>
+      </div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Blocked</div>
+      <div class="metric-row">
+        <div class="metric-value" id="m-blocked">-</div>
+        <div class="metric-change neg" id="m-blocked-note"></div>
+      </div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Block rate</div>
+      <div class="metric-row">
+        <div class="metric-value" id="m-rate">-</div>
+      </div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Spend</div>
+      <div class="metric-row">
+        <div class="metric-value" id="m-cost">-</div>
+        <div class="metric-change neutral" id="m-cost-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cols">
+
+    <div class="card">
+      <div class="card-head">Agents <span id="agent-count"></span></div>
+      <div id="agent-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        Audit log
+        <span id="decision-count"></span>
+      </div>
+      <div class="filters">
+        <button class="fbtn on" data-f="all">All</button>
+        <button class="fbtn" data-f="blocked">Blocked</button>
+        <button class="fbtn" data-f="allowed">Allowed</button>
+      </div>
+      <div class="audit-list" id="decision-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let selAgent = null;
+let filter = 'all';
+
+async function api(path) { return (await fetch(path)).json(); }
+
+async function loadOverview() {
+  const o = await api('/api/overview');
+  document.getElementById('agent-total').textContent = o.agent_count;
+  document.getElementById('m-decisions').textContent = o.total_decisions.toLocaleString();
+  document.getElementById('m-decisions-note').textContent =
+    o.safety_blocks + o.values_blocks > 0
+      ? `${o.safety_blocks} safety, ${o.values_blocks} values`
+      : '';
+  document.getElementById('m-blocked').textContent = o.total_blocked.toLocaleString();
+  document.getElementById('m-blocked-note').textContent =
+    o.total_blocked > 0 ? `of ${o.total_decisions}` : '';
+  document.getElementById('m-rate').textContent = o.block_rate.toFixed(1) + '%';
+  document.getElementById('m-cost').textContent =
+    o.total_cost_usd > 0 ? `$${o.total_cost_usd.toFixed(2)}` : '--';
+  document.getElementById('m-cost-note').textContent =
+    o.total_tokens_in + o.total_tokens_out > 0
+      ? fmtTok(o.total_tokens_in + o.total_tokens_out) + ' tokens'
+      : '';
+}
+
+async function loadAgents() {
+  const agents = await api('/api/agents');
+  const el = document.getElementById('agent-list');
+  document.getElementById('agent-count').textContent = agents.length;
+
+  el.innerHTML = agents.map(a => {
+    const ic = a.blocked > 0 ? 'r' : a.block_rate > 0 ? 'y' : 'g';
+    const tc = a.mode === 'enforce' ? 'tag-enf' : 'tag-shd';
+    const tl = a.mode === 'enforce' ? 'Enforce' : 'Shadow';
+    const s = selAgent === a.name ? ' sel' : '';
+    return `<div class="agent${s}" onclick="pickAgent('${esc(a.name)}')">
+      <div class="agent-row">
+        <div class="agent-id"><div class="indicator ${ic}"></div>${esc(a.name)}</div>
+        <span class="tag ${tc}">${tl}</span>
+      </div>
+      <div class="agent-detail">
+        <span><b>${a.total_decisions}</b> decisions</span>
+        <span><b>${a.blocked}</b> blocked</span>
+        ${a.cost_usd > 0 ? `<span><b>$${a.cost_usd.toFixed(2)}</b></span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadDecisions() {
+  let url = '/api/decisions?limit=100';
+  if (selAgent) url += `&agent=${encodeURIComponent(selAgent)}`;
+  if (filter === 'blocked') url += '&blocked=true';
+  if (filter === 'allowed') url += '&blocked=false';
+
+  const p = await api(url);
+  const el = document.getElementById('decision-list');
+  document.getElementById('decision-count').textContent =
+    p.total + (selAgent ? ` \u00b7 ${selAgent}` : '');
+
+  if (!p.decisions.length) {
+    el.innerHTML = '<div class="empty">No decisions recorded.<br>Run <code>glassbox demo</code> to generate data.</div>';
+    return;
+  }
+
+  el.innerHTML = p.decisions.map(d => {
+    const cls = d.decision === 'deny' ? 'no'
+              : d.decision === 'would-refuse' ? 'wr' : 'ok';
+    const icon = cls === 'no' ? '\u2715' : cls === 'wr' ? '\u25B2' : '\u2713';
+    const label = { deny:'Blocked', 'would-refuse':'Would block', allow:'Allowed', 'would-allow':'Allowed' }[d.decision] || d.decision;
+    const time = d.t > 0 ? new Date(d.t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
+
+    const rails = d.verdicts.map(v =>
+      `<span class="rail ${v.refused ? 'refused' : 'clean'}">${esc(v.rail)} ${v.refused ? '\u2715' : '\u2713'}</span>`
+    ).join('<span class="pipe">\u00b7</span>');
+
+    const reason = d.blocked ? `<div class="row-reason">${esc(d.reason)}</div>` : '';
+    const agentNote = !selAgent ? `<span class="pipe">\u00b7</span><span>${esc(d.agent)}</span>` : '';
+
+    return `<div class="row">
+      <div class="verdict-dot ${cls}">${icon}</div>
+      <div class="row-body">
+        <div class="row-action">${esc(d.action)}</div>
+        <div class="row-meta">${rails}${agentNote}</div>
+        ${reason}
+      </div>
+      <div class="row-right">
+        <div class="row-verdict ${cls}">${label}</div>
+        <div>${time}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function pickAgent(name) {
+  selAgent = selAgent === name ? null : name;
+  loadAgents();
+  loadDecisions();
+}
+
+document.querySelectorAll('.fbtn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.fbtn').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    filter = b.dataset.f;
+    loadDecisions();
+  });
+});
+
+function fmtTok(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
+  return ''+n;
+}
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function tick() { await Promise.all([loadOverview(), loadAgents(), loadDecisions()]); }
+tick();
+setInterval(tick, 3000);
+</script>
+</body>
+</html>

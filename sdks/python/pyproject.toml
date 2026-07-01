@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "glassbox"
+version = "0.1.0"
+description = "Python SDK for Glassbox — AI agent governance"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "Strata Software Group" }]
+keywords = ["ai", "agents", "governance", "compliance", "glassbox"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Homepage = "https://github.com/Aphrodine-wq/glassbox"

@@ -1,0 +1,21 @@
+{
+  "name": "@glassbox/sdk",
+  "version": "0.1.0",
+  "description": "Glassbox SDK — AI agent governance",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["ai", "agents", "governance", "compliance", "glassbox"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Aphrodine-wq/glassbox"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
