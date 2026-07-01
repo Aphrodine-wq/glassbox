@@ -1,0 +1,83 @@
+{
+  "name": "glassbox-governance",
+  "displayName": "Glassbox",
+  "description": "AI agent governance status in your editor",
+  "version": "0.1.0",
+  "publisher": "glassbox-fleet",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "glassbox",
+          "title": "Glassbox",
+          "icon": "$(shield)"
+        }
+      ]
+    },
+    "views": {
+      "glassbox": [
+        {
+          "id": "agents",
+          "name": "Agents"
+        },
+        {
+          "id": "decisions",
+          "name": "Recent Decisions"
+        },
+        {
+          "id": "budget",
+          "name": "Budget"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Glassbox",
+      "properties": {
+        "glassbox.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3120",
+          "description": "URL of the Glassbox governance server"
+        },
+        "glassbox.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for authenticating with the Glassbox server"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "glassbox.refresh",
+        "title": "Glassbox: Refresh"
+      },
+      {
+        "command": "glassbox.exportReport",
+        "title": "Glassbox: Export Report"
+      },
+      {
+        "command": "glassbox.toggleMode",
+        "title": "Glassbox: Toggle Mode"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}

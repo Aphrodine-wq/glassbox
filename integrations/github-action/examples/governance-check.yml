@@ -1,0 +1,105 @@
+# Example: Glassbox governance checks in a CI/CD pipeline.
+#
+# This workflow shows two patterns:
+#   1. Reporting an allowed deploy so the decision is audited.
+#   2. Blocking a dangerous operation before it can execute.
+
+name: Deploy with Glassbox Governance
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy-target:
+        description: "Deployment target"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+      force-deploy:
+        description: "Force deploy (skip checks)"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  # ── Gate: check whether this deploy is allowed ────────────────────
+  governance:
+    name: Glassbox Governance Gate
+    runs-on: ubuntu-latest
+    outputs:
+      decision: ${{ steps.gate.outputs.decision }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Report the deploy action to Glassbox. In enforce mode, the step
+      # fails if the governance rails block it.
+      - name: Check deploy governance
+        id: gate
+        uses: ./integrations/github-action
+        with:
+          glassbox-url: ${{ secrets.GLASSBOX_URL }}
+          api-key: ${{ secrets.GLASSBOX_API_KEY }}
+          agent-name: "deploy-pipeline"
+          mode: "enforce"
+          action: "deploy ${{ inputs.deploy-target || 'staging' }}"
+          target: ${{ inputs.deploy-target || 'staging' }}
+
+  # ── Deploy: only runs if governance allowed it ────────────────────
+  deploy:
+    name: Deploy
+    needs: governance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to ${{ inputs.deploy-target || 'staging' }}
+        run: |
+          echo "Deploying to ${{ inputs.deploy-target || 'staging' }}..."
+          echo "Governance decision was: ${{ needs.governance.outputs.decision }}"
+          # Your real deploy commands here.
+
+  # ── Block: catch dangerous operations ─────────────────────────────
+  block-dangerous:
+    name: Block Dangerous Operations
+    runs-on: ubuntu-latest
+    if: ${{ inputs.force-deploy == true }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # A force-deploy is an irreversible action. Glassbox should catch
+      # this via the safety rail and block it in enforce mode.
+      - name: Gate force-deploy
+        uses: ./integrations/github-action
+        with:
+          glassbox-url: ${{ secrets.GLASSBOX_URL }}
+          api-key: ${{ secrets.GLASSBOX_API_KEY }}
+          agent-name: "deploy-pipeline"
+          mode: "enforce"
+          action: "force deploy --skip-checks --no-rollback ${{ inputs.deploy-target || 'staging' }}"
+          target: ${{ inputs.deploy-target || 'staging' }}
+
+      # This step only runs if Glassbox allowed the force-deploy.
+      - name: Execute force deploy
+        run: |
+          echo "Force deploying (this should have been blocked)..."
+
+  # ── Shadow: observe without blocking ──────────────────────────────
+  shadow-audit:
+    name: Shadow Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # In shadow mode, every action is allowed but the decision is
+      # logged. Use this to build confidence before switching to enforce.
+      - name: Audit this run (shadow)
+        uses: ./integrations/github-action
+        with:
+          glassbox-url: ${{ secrets.GLASSBOX_URL }}
+          api-key: ${{ secrets.GLASSBOX_API_KEY }}
+          agent-name: "audit-observer"
+          mode: "shadow"
