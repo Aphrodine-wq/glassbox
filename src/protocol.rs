@@ -57,8 +57,16 @@ pub struct GateResponse {
     pub agent: String,
     pub mode: Mode,
     pub decision: String,
+    /// Would ANY rail refuse, regardless of per-rail mode — descriptive only
+    /// (card/audit/"would-block" stats). NOT the actual gating decision; see
+    /// `enforced_blocked`.
     pub blocked: bool,
     pub reason: String,
+    /// The REAL gating decision: true only if a refused rail's own mode (see
+    /// `mode::Mode::for_rail`) resolves to `Enforce`. This is what the hook
+    /// actually denies on — see `gate::decide_per_rail`.
+    pub enforced_blocked: bool,
+    pub enforced_reason: String,
     pub verdicts: Vec<Verdict>,
     pub card: String,
     pub provenance: Option<Provenance>,
@@ -79,6 +87,8 @@ impl GateResponse {
             "decision": self.decision,
             "blocked": self.blocked,
             "reason": self.reason,
+            "enforced_blocked": self.enforced_blocked,
+            "enforced_reason": self.enforced_reason,
             "verdicts": self.verdicts.iter().map(verdict_json).collect::<Vec<_>>(),
             "provenance": self.provenance.as_ref().map(prov_json),
             "provenance_id": self.provenance_id,
@@ -160,6 +170,7 @@ pub fn run_gate(req: &GateRequest) -> GateResponse {
     let t = now_millis();
     let verdicts = gate::evaluate(&req.action, &req.target, true);
     let (blocked, reason) = gate::decide(&verdicts);
+    let (enforced_blocked, enforced_reason) = gate::decide_per_rail(&verdicts);
 
     let mut provenance = verdicts
         .iter()
@@ -190,6 +201,8 @@ pub fn run_gate(req: &GateRequest) -> GateResponse {
         decision,
         blocked,
         reason,
+        enforced_blocked,
+        enforced_reason,
         verdicts,
         card,
         provenance,

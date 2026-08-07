@@ -85,6 +85,22 @@ pub fn decide(verdicts: &[Verdict]) -> (bool, String) {
     (false, "all rails clean".to_string())
 }
 
+/// Per-rail-mode decision: blocked only if a refused rail's OWN mode (see
+/// `mode::Mode::for_rail`) resolves to `Enforce`. This is the structural
+/// non-blocking guarantee, generalized from one global mode to per-rail —
+/// a refusal from a rail still in `Shadow` (e.g. `values`, until it has a
+/// false-positive track record comparable to `safety`) can never produce a
+/// `true` here, no matter what any other rail's mode is set to. Same
+/// first-refusal-wins ordering as `decide` (envelope, values, safety).
+pub fn decide_per_rail(verdicts: &[Verdict]) -> (bool, String) {
+    for v in verdicts {
+        if v.refused && crate::mode::Mode::for_rail(&v.rail) == crate::mode::Mode::Enforce {
+            return (true, format!("{} rail: {}", v.rail, v.reason));
+        }
+    }
+    (false, String::new())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,6 +196,113 @@ mod tests {
         let (blocked, reason) = decide(&verdicts);
         assert!(!blocked);
         assert_eq!(reason, "all rails clean");
+    }
+
+    /// Set/clear a batch of vars for the duration of `f`, always restoring
+    /// prior values (even on panic) — mirrors mode.rs's test helper of the
+    /// same shape. Takes ALL vars in one call, never nested calls to this
+    /// same helper: `ENV_LOCK` is a plain (non-reentrant) `Mutex`, so a
+    /// nested call would deadlock trying to lock it twice on one thread.
+    fn with_env<R>(vars: &[(&str, Option<&str>)], f: impl FnOnce() -> R) -> R {
+        let _guard = crate::test_support::ENV_LOCK.lock().unwrap();
+        let prev: Vec<(String, Option<String>)> = vars
+            .iter()
+            .map(|(k, _)| (k.to_string(), std::env::var(k).ok()))
+            .collect();
+        for (k, v) in vars {
+            match v {
+                Some(val) => std::env::set_var(k, val),
+                None => std::env::remove_var(k),
+            }
+        }
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+        for (k, p) in prev {
+            match p {
+                Some(val) => std::env::set_var(&k, val),
+                None => std::env::remove_var(&k),
+            }
+        }
+        result.unwrap_or_else(|e| std::panic::resume_unwind(e))
+    }
+
+    #[test]
+    fn decide_per_rail_never_blocks_when_no_rail_enforces() {
+        with_env(
+            &[("GLASSBOX_MODE", None), ("GLASSBOX_SAFETY_MODE", None)],
+            || {
+                let verdicts = vec![
+                    Verdict {
+                        rail: "values".into(),
+                        refused: true,
+                        reason: "wrong".into(),
+                        policy: "NoExtraction".into(),
+                    },
+                    Verdict {
+                        rail: "safety".into(),
+                        refused: true,
+                        reason: "irreversible".into(),
+                        policy: "Irreversible".into(),
+                    },
+                ];
+                let (blocked, reason) = decide_per_rail(&verdicts);
+                assert!(!blocked, "no rail is in Enforce, so nothing can block");
+                assert_eq!(reason, "");
+            },
+        );
+    }
+
+    #[test]
+    fn decide_per_rail_blocks_only_the_enforcing_rail() {
+        with_env(
+            &[
+                ("GLASSBOX_MODE", Some("shadow")),
+                ("GLASSBOX_SAFETY_MODE", Some("enforce")),
+            ],
+            || {
+                // values refuses first in iteration order, but values is still
+                // Shadow (only GLASSBOX_SAFETY_MODE was set) — must NOT block.
+                let verdicts = vec![
+                    Verdict {
+                        rail: "values".into(),
+                        refused: true,
+                        reason: "wrong".into(),
+                        policy: "NoExtraction".into(),
+                    },
+                    Verdict {
+                        rail: "safety".into(),
+                        refused: true,
+                        reason: "rm -rf".into(),
+                        policy: "Irreversible".into(),
+                    },
+                ];
+                let (blocked, reason) = decide_per_rail(&verdicts);
+                assert!(blocked, "safety rail is Enforce and refused");
+                assert!(
+                    reason.starts_with("safety rail:"),
+                    "must skip the shadow-mode values refusal, reason was: {reason}"
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn decide_per_rail_ignores_shadow_rail_refusal_even_alone() {
+        with_env(
+            &[
+                ("GLASSBOX_MODE", Some("shadow")),
+                ("GLASSBOX_SAFETY_MODE", None),
+            ],
+            || {
+                let verdicts = vec![Verdict {
+                    rail: "values".into(),
+                    refused: true,
+                    reason: "wrong".into(),
+                    policy: "NoExtraction".into(),
+                }];
+                let (blocked, _) = decide_per_rail(&verdicts);
+                assert!(!blocked, "values has no override and global is shadow");
+            },
+        );
     }
 
     #[test]

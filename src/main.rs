@@ -55,8 +55,10 @@ fn main() {
 /// PreToolUse adapter: stdin JSON in, hook protocol out.
 ///
 /// The body is wrapped in `catch_unwind` — a governance hook must never crash a
-/// tool call, so any panic degrades to a silent defer (`{}`). The decision→output
-/// mapping goes through [`mode::resolve_output`], so in the default `Shadow` mode
+/// tool call, so any panic degrades to a silent defer (`{}`). The actual deny
+/// decision comes from [`gate::decide_per_rail`] (via `resp.enforced_blocked`),
+/// which can only be true for a rail whose own mode resolves to `Enforce` — so
+/// with everything at its default (`GLASSBOX_MODE` unset ⇒ every rail `Shadow`)
 /// the hook is *structurally* incapable of emitting a deny.
 fn cmd_hook() -> i32 {
     let out = std::panic::catch_unwind(hook_decide).unwrap_or_else(|_| "{}".to_string());
@@ -65,9 +67,11 @@ fn cmd_hook() -> i32 {
 }
 
 /// The pure-ish core of the hook: read stdin → perceive (Claude Code adapter) →
-/// run the gate → resolve the hook output for the current mode. Returns the
-/// stdout JSON. Mode is env-resolved and defaults to Shadow, so the live default
-/// can never deny (see [`mode::resolve_output`]).
+/// run the gate → resolve the hook output. Returns the stdout JSON. The actual
+/// gate decision is per-rail (`resp.enforced_blocked`, see
+/// [`gate::decide_per_rail`]) — `req.mode` (the global `GLASSBOX_MODE` default)
+/// still drives the card/decision-label display and the shadow "wedge" hint
+/// below, but no longer gates the deny itself.
 fn hook_decide() -> String {
     let mut input = String::new();
     if std::io::stdin().read_to_string(&mut input).is_err() {
@@ -95,7 +99,15 @@ fn hook_decide() -> String {
         link: false, // hot path: never the extra Tessera read
     };
     let resp = protocol::run_gate(&req);
-    match mode::resolve_output(req.mode, resp.blocked, &resp.reason) {
+    // `enforced_blocked` already encodes "a rail whose own mode resolved to
+    // Enforce refused" (see gate::decide_per_rail) — passing Mode::Enforce
+    // here just lets resolve_output's tested Enforce-arm turn that bool into
+    // a HookOutput; the per-rail gating already happened upstream.
+    match mode::resolve_output(
+        mode::Mode::Enforce,
+        resp.enforced_blocked,
+        &resp.enforced_reason,
+    ) {
         deny @ mode::HookOutput::Deny(_) => deny.render(),
         // Defer: in shadow, attach the live one-liner via `systemMessage` so the
         // human SEES the governed decision at the moment of action (the wedge),
